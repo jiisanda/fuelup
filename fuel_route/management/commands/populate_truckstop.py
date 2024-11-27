@@ -112,9 +112,37 @@ class Command(BaseCommand):
                 for row in reader:
                     try:
                         retail_price = float(row['Retail Price'].strip())
+                        opis_id = int(row['OPIS Truckstop ID'])
                     except ValueError:
+                        self.stdout.write(
+                            self.style.ERROR(f"Invalid price or OPIS ID for {row['Truckstop Name']}, skipping..."))
                         continue
 
+                    # First, check if the truck stop exists and has coordinates
+                    existing_stop = TruckStop.objects.filter(opis_id=opis_id).first()
+
+                    if existing_stop:
+                        # If it exists but lacks coordinates, update them
+                        if existing_stop.latitude is None or existing_stop.longitude is None:
+                            self.stdout.write(self.style.WARNING(
+                                f"Updating coordinates for existing stop: {existing_stop.name}"
+                            ))
+                            lat, lon = self.geocode_address(
+                                existing_stop.address,
+                                existing_stop.city,
+                                existing_stop.state
+                            )
+                            if lat and lon:
+                                existing_stop.latitude = lat
+                                existing_stop.longitude = lon
+                                existing_stop.save()
+                        else:
+                            self.stdout.write(self.style.SUCCESS(
+                                f"Stop already exists with coordinates: {existing_stop.name}"
+                            ))
+                        continue
+
+                    # If it's a new entry, calculate coordinates
                     lat, lon = self.geocode_address(
                         row['Address'],
                         row['City'],
@@ -122,26 +150,34 @@ class Command(BaseCommand):
                     )
 
                     if lat is None or lon is None:
+                        self.stdout.write(self.style.ERROR(
+                            f"Could not geocode address for {row['Truckstop Name']}, skipping..."
+                        ))
                         continue
 
                     time.sleep(1)  # Rate limiting
 
                     try:
-                        _, created = TruckStop.objects.get_or_create(
-                            opis_id=int(row['OPIS Truckstop ID']),
-                            defaults={
-                                'name': row['Truckstop Name'].strip(),
-                                'address': row['Address'].strip(),
-                                'city': row['City'].strip(),
-                                'state': row['State'].strip(),
-                                'rack_id': int(row['Rack ID']),
-                                'retail_price': retail_price,
-                                'latitude': lat,
-                                'longitude': lon
-                            },
+                        TruckStop.objects.create(
+                            opis_id=opis_id,
+                            name=row['Truckstop Name'].strip(),
+                            address=row['Address'].strip(),
+                            city=row['City'].strip(),
+                            state=row['State'].strip(),
+                            rack_id=int(row['Rack ID']),
+                            retail_price=retail_price,
+                            latitude=lat,
+                            longitude=lon
                         )
+                        self.stdout.write(self.style.SUCCESS(
+                            f"Created new stop: {row['Truckstop Name']}"
+                        ))
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f"Database error: {str(e)}"))
 
+            self.stdout.write(self.style.SUCCESS("Import completed successfully"))
+
+        except FileNotFoundError:
+            self.stdout.write(self.style.ERROR(f"File not found: {csv_file_path}"))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"An error occurred: {e}"))
