@@ -9,6 +9,19 @@ class TruckStop(models.Model):
     state = models.CharField(max_length=2)
     rack_id = models.IntegerField()
     retail_price = models.DecimalField(max_digits=6, decimal_places=2)
+    latitude = models.FloatField(null=True)
+    longitude = models.FloatField(null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['latitude', 'longitude']),
+            models.Index(fields=['retail_price']),
+            models.Index(fields=['state']),
+        ]
 
     def __str__(self):
-        return f"{self.opis_id} | {self.name} - {self.city}, {self.state}"
+        return f"{self.name} - {self.city}, {self.state}"
+
+    def get_location_tuple(self):
+        """Return location as a tuple for distance calculations."""
+        return self.latitude, self.longitude
