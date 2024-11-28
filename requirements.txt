@@ -23,3 +23,5 @@ sqlparse==0.5.2
 typing_extensions==4.12.2
 tzdata==2024.2
 urllib3==2.2.3
+
+googlemaps~=4.10.0
