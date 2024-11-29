@@ -2,6 +2,8 @@ from typing import List, Dict, Tuple
 
 import googlemaps
 from django.conf import settings
+from django.db import models
+from django.views.generic import TemplateView
 from geopy.distance import geodesic
 from rest_framework import status
 from rest_framework.response import Response
@@ -10,7 +12,10 @@ from rest_framework.views import APIView
 from fuel_route.models import TruckStop
 
 
-# Create your views here.
+class HomePageView(TemplateView):
+    template_name = 'index.html'
+
+
 class OptimalRouteView(APIView):
     """
     API endpoint to calculate optimal route with fuel stops
@@ -110,12 +115,16 @@ class OptimalRouteView(APIView):
             current_distance += segment_distance
 
             if current_distance >= BUFFER_DISTANCE:
+                # Get nearby stops with their minimum fuel price
                 nearby_stops = TruckStop.objects.filter(
                     latitude__gte=min(point['lat'] - 0.5, point['lat'] + 0.5),
                     latitude__lte=max(point['lat'] - 0.5, point['lat'] + 0.5),
                     longitude__gte=min(point['lng'] - 0.5, point['lng'] + 0.5),
-                    longitude__lte=max(point['lng'] - 0.5, point['lng'] + 0.5)
-                ).order_by('retail_price')[:10]
+                    longitude__lte=max(point['lng'] - 0.5, point['lng'] + 0.5),
+                    fuel_prices__isnull=False  # Ensure stops have prices
+                ).annotate(
+                    min_price=models.Min('fuel_prices__price')  # Get minimum price for each stop
+                ).order_by('min_price')[:10]
 
                 if nearby_stops:
                     best_stop = None
@@ -124,8 +133,8 @@ class OptimalRouteView(APIView):
                     for stop in nearby_stops:
                         stop_point = (stop.latitude, stop.longitude)
                         deviation = geodesic(last_fuel_point, stop_point).miles
-                        price_factor = float(stop.retail_price)
-                        score = (price_factor * 0.7) + (deviation * 0.3)        # price factor is 70% and deviation is 30% - prioritizing price over deviation
+                        price_factor = float(stop.min_price)
+                        score = (price_factor * 0.7) + (deviation * 0.3)
 
                         if score < best_score:
                             best_score = score
