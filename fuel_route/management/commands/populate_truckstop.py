@@ -6,7 +6,7 @@ from math import cos, radians, sin
 from django.core.management import BaseCommand
 from geopy.geocoders import Nominatim
 
-from fuel_route.models import TruckStop
+from fuel_route.models import TruckStop, FuelPrice
 
 
 class Command(BaseCommand):
@@ -118,62 +118,37 @@ class Command(BaseCommand):
                             self.style.ERROR(f"Invalid price or OPIS ID for {row['Truckstop Name']}, skipping..."))
                         continue
 
-                    # First, check if the truck stop exists and has coordinates
-                    existing_stop = TruckStop.objects.filter(opis_id=opis_id).first()
-
-                    if existing_stop:
-                        # If it exists but lacks coordinates, update them
-                        if existing_stop.latitude is None or existing_stop.longitude is None:
-                            self.stdout.write(self.style.WARNING(
-                                f"Updating coordinates for existing stop: {existing_stop.name}"
-                            ))
-                            lat, lon = self.geocode_address(
-                                existing_stop.address,
-                                existing_stop.city,
-                                existing_stop.state
-                            )
-                            if lat and lon:
-                                existing_stop.latitude = lat
-                                existing_stop.longitude = lon
-                                existing_stop.save()
-                        else:
-                            self.stdout.write(self.style.SUCCESS(
-                                f"Stop already exists with coordinates: {existing_stop.name}"
-                            ))
-                        continue
-
-                    # If it's a new entry, calculate coordinates
-                    lat, lon = self.geocode_address(
-                        row['Address'],
-                        row['City'],
-                        row['State']
+                    truck_stop, created = TruckStop.objects.get_or_create(
+                        opis_id=opis_id,
+                        defaults={
+                            'name': row['Truckstop Name'].strip(),
+                            'address': row['Address'].strip(),
+                            'city': row['City'].strip(),
+                            'state': row['State'].strip(),
+                            'rack_id': int(row['Rack ID'])
+                        }
                     )
 
-                    if lat is None or lon is None:
-                        self.stdout.write(self.style.ERROR(
-                            f"Could not geocode address for {row['Truckstop Name']}, skipping..."
-                        ))
-                        continue
-
-                    time.sleep(1)  # Rate limiting
-
-                    try:
-                        TruckStop.objects.create(
-                            opis_id=opis_id,
-                            name=row['Truckstop Name'].strip(),
-                            address=row['Address'].strip(),
-                            city=row['City'].strip(),
-                            state=row['State'].strip(),
-                            rack_id=int(row['Rack ID']),
-                            retail_price=retail_price,
-                            latitude=lat,
-                            longitude=lon
+                    # If it's a new truck stop or lacks coordinates, update them
+                    if created or truck_stop.latitude is None or truck_stop.longitude is None:
+                        lat, lon = self.geocode_address(
+                            truck_stop.address,
+                            truck_stop.city,
+                            truck_stop.state
                         )
-                        self.stdout.write(self.style.SUCCESS(
-                            f"Created new stop: {row['Truckstop Name']}"
-                        ))
-                    except Exception as e:
-                        self.stdout.write(self.style.ERROR(f"Database error: {str(e)}"))
+                        if lat and lon:
+                            truck_stop.latitude = lat
+                            truck_stop.longitude = lon
+                            truck_stop.save()
+
+                    FuelPrice.objects.create(
+                        truck_stop=truck_stop,
+                        price=retail_price
+                    )
+
+                    self.stdout.write(self.style.SUCCESS(
+                        f"{'Created' if created else 'Updated'} stop: {truck_stop.name} with price: {retail_price}"
+                    ))
 
             self.stdout.write(self.style.SUCCESS("Import completed successfully"))
 
