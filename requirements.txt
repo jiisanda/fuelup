@@ -25,3 +25,4 @@ tzdata==2024.2
 urllib3==2.2.3
 
 googlemaps~=4.10.0
+python-dotenv~=1.0.1
