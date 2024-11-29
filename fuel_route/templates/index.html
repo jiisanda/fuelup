@@ -1,0 +1,55 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuelUp Route Planner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>FuelUp Route Planner</h1>
+        </div>
+
+        <div class="form-container">
+            <div class="input-group">
+                <input type="text" id="start" placeholder="Start Location (e.g., Dallas, TX)" value="Dallas, TX">
+                <input type="text" id="end" placeholder="End Location (e.g., Chicago, IL)" value="Chicago, IL">
+                <button onclick="calculateRoute()">Calculate Route</button>
+            </div>
+        </div>
+
+        <div class="content-wrapper">
+            <div id="map"></div>
+            <div class="summary">
+                <h2>Trip Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <h3>Total Distance</h3>
+                        <p id="total-distance">0 miles</p>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Duration</h3>
+                        <p id="duration">0 hours</p>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Fuel Stops</h3>
+                        <p id="fuel-stops">0</p>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Total Cost</h3>
+                        <p id="total-cost">$0.00</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{% static 'js/main.js' %}"></script>
+</body>
+</html>
