@@ -1,3 +1,4 @@
+from http.client import HTTPException
 from typing import List, Dict, Tuple
 
 import googlemaps
@@ -23,8 +24,8 @@ class OptimalRouteView(APIView):
     def __init__(self, *args, **kwargs):
         super().__init__(**kwargs)
         self.gmaps = googlemaps.Client(key=settings.GOOGLE_API_KEY)
-        self.MAX_RANGE = 500  # Maximum range in miles
-        self.MPG = 10  # Average miles per gallon
+        self.MAX_RANGE = 500            # Maximum range in miles
+        self.MPG = 10                   # Average miles per gallon
 
     def post(self, request, *args, **kwargs) -> Response:
         """
@@ -35,18 +36,30 @@ class OptimalRouteView(APIView):
         }
         :return: Response with optimal route and fuel stops
         """
-        start_location = request.data.get('start_location')
-        end_location = request.data.get('end_location')
+        try:
+            start_location = request.data.get('start_location')
+            end_location = request.data.get('end_location')
 
-        # Validate input
-        if not start_location or not end_location:
+            if not start_location or not end_location:
+                return Response({
+                    "error": "Missing required fields: start_location, end_location"
+                }, status=400)
+
+            route_data = self.calculate_optimal_route(start_location, end_location)
+
+            return Response(route_data, status=status.HTTP_200_OK)
+        except ValueError as e:
             return Response({
-                "error": "Missing required fields: start_location, end_location"
-            }, status=400)
-
-        route_data = self.calculate_optimal_route(start_location, end_location)
-
-        return Response(route_data, status=status.HTTP_200_OK)
+                "error": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except googlemaps.exceptions.ApiError as e:
+            return Response({
+                "error": f"Google Maps API  error: {str(e)}"
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except Exception as e:
+            return Response({
+                "error": f"Unexpected error: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def calculate_optimal_route(self, start_location: str, end_location: str) -> Dict:
         directions = self.gmaps.directions(
@@ -115,15 +128,15 @@ class OptimalRouteView(APIView):
             current_distance += segment_distance
 
             if current_distance >= BUFFER_DISTANCE:
-                # Get nearby stops with their minimum fuel price
+                # nearby stops with their minimum fuel price
                 nearby_stops = TruckStop.objects.filter(
                     latitude__gte=min(point['lat'] - 0.5, point['lat'] + 0.5),
                     latitude__lte=max(point['lat'] - 0.5, point['lat'] + 0.5),
                     longitude__gte=min(point['lng'] - 0.5, point['lng'] + 0.5),
                     longitude__lte=max(point['lng'] - 0.5, point['lng'] + 0.5),
-                    fuel_prices__isnull=False  # Ensure stops have prices
+                    fuel_prices__isnull=False
                 ).annotate(
-                    min_price=models.Min('fuel_prices__price')  # Get minimum price for each stop
+                    min_price=models.Min('fuel_prices__price')
                 ).order_by('min_price')[:10]
 
                 if nearby_stops:
